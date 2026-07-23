@@ -1,10 +1,11 @@
 {
-    "display_name": "Dynamic Relationship Widget",
-    "version": "1.0.1",
-    "author": "SillyTavern Extension Architect",
-    "description": "Floating relationship tracker.",
+    "display_name": "Relationship Widget",
+    "version": "1.2.0",
+    "author": "ST Extension Architect",
+    "loading_order": 50,
     "js": "index.js",
     "css": "style.css",
     "generate_interceptor": "relationshipWidgetInterceptor",
-    "auto_update": true
+    "auto_update": false,
+    "homePage": ""
 }
