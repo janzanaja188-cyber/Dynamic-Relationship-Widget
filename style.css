@@ -13,17 +13,15 @@
 .st-rel-ios-toggle input:checked + .st-rel-slider { background-color: #34c759; }
 .st-rel-ios-toggle input:checked + .st-rel-slider:before { transform: translateX(20px); }
 
-/* Widget - ค่าเริ่มต้นสำหรับ Desktop */
 #st-rel-widget {
     position: fixed;
     width: 80px;
     height: 80px;
-    z-index: 2147483647; /* บังคับให้อยู่บนสุด ทะลุทุกสิ่ง */
+    z-index: 2147483647;
     pointer-events: none;
-    touch-action: none; /* กันจอมือถือเลื่อนตอนลาก */
+    touch-action: none;
 }
 
-/* รองรับจอมือถือ (ปรับขนาดให้เล็กลง ไม่บังแชท) */
 @media screen and (max-width: 768px) {
     #st-rel-widget {
         width: 60px;
@@ -43,7 +41,6 @@
 
 #st-rel-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; transition: filter 0.5s; pointer-events: none; }
 
-/* States */
 .state-normal { border-color: rgba(255,255,255,0.3); }
 .state-love { border-color: #ff4d85; box-shadow: 0 0 20px rgba(255, 77, 133, 0.8); animation: heartbeat 1.5s infinite; }
 .state-love #st-rel-avatar { filter: contrast(1.1) saturate(1.2); }
@@ -52,7 +49,6 @@
 .state-sad, .state-cry { border-color: #32ade6; box-shadow: 0 0 15px rgba(50, 173, 230, 0.6); }
 .state-sad #st-rel-avatar, .state-cry #st-rel-avatar { filter: grayscale(0.5) sepia(0.2) hue-rotate(180deg); }
 
-/* Popups */
 #st-rel-score-popup { position: absolute; top: -15px; right: -5px; background: rgba(0,0,0,0.8); color: white; padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; opacity: 0; pointer-events: none; }
 .score-animate { animation: floatUpFade 2s forwards; }
 .score-positive { background: #34c759 !important; }
