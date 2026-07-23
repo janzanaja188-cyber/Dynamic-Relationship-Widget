@@ -16,7 +16,7 @@ const idleWhispers = [
     "...", "Are you still there?", "Just looking at you...", "Thinking...", "*waits patiently*"
 ];
 
-// 1. ระบบจัดการ Settings
+// โหลดและเซฟตั้งค่าผ่าน Context ของ SillyTavern
 function loadSettings() {
     const context = SillyTavern.getContext();
     settings = Object.assign({}, defaultSettings, context.extensionSettings[MODULE_NAME]);
@@ -29,17 +29,14 @@ function saveSettings() {
     context.saveSettingsDebounced();
 }
 
-// 2. PROMPT INTERCEPTOR (แอบยัดคำสั่งต่อท้ายข้อความ User)
-// ต้องประกาศเป็น Global Function ตามชื่อที่ระบุใน manifest.json
+// Prompt Interceptor (บังคับแอบต่อท้ายข้อความ User เพื่อสั่ง AI ให้ส่ง Status และ Score)
 window.relationshipWidgetInterceptor = function(chat, contextSize, abort, type) {
     if (!settings.enabled) return;
-    if (type !== 'chat' && type !== 'swipe') return; // ทำงานเฉพาะตอนแชทหรือปัดเปลี่ยนข้อความ
+    if (type !== 'chat' && type !== 'swipe') return;
 
-    const instruction = `\n\n[SYSTEM INSTRUCTION: At the very end of your response, you MUST append a hidden HTML comment containing the relationship status and score change. Format EXACTLY like this: <!-- [STATUS: normal] [SCORE: +10] -->. Allowed states: normal, love, angry, sad, cry. Score: A number between -100 and +100. This MUST be inside the HTML comment at the bottom.]`;
+    const instruction = `\n\n[SYSTEM INSTRUCTION: At the very end of your response, you MUST append a hidden HTML comment containing the relationship status and score change. Format EXACTLY like this: \`<!-- [STATUS: normal] [SCORE: +10] -->\`. Allowed states: normal, love, angry, sad, cry. Score: A number between -100 and +100. This MUST be inside the HTML comment at the bottom.]`;
 
     let userMsgFound = false;
-    
-    // ค้นหาข้อความล่าสุดของ User แล้วเอาคำสั่งไปต่อท้าย
     for (let i = chat.length - 1; i >= 0; i--) {
         if (chat[i].role === 'user') {
             chat[i].content += instruction;
@@ -48,16 +45,14 @@ window.relationshipWidgetInterceptor = function(chat, contextSize, abort, type) 
         }
     }
 
-    // เผื่อหาไม่เจอ (กรณีแปลกๆ) ให้ยัดเป็น System ต่อท้ายสุดไปเลย
     if (!userMsgFound) {
         chat.push({ role: 'system', content: instruction });
     }
 };
 
-// 3. ฟังก์ชันสกัดหา Status และ Score จากข้อความ
+// ฟังก์ชันแกะรอยหา Status และ Score จากข้อความของ AI
 function parseRelationshipData(text) {
     if (!text) return null;
-    // Regex ยืดหยุ่นขึ้น รองรับการเว้นวรรคแปลกๆ หรือรูปแบบ Comment ที่เพี้ยนนิดหน่อย
     const regex = /<!--\s*\[?STATUS:\s*([a-zA-Z]+)\]?\s*\[?SCORE:\s*([\+\-]?\d+)\]?\s*--!?>/i;
     const match = text.match(regex);
 
@@ -70,7 +65,7 @@ function parseRelationshipData(text) {
     return null;
 }
 
-// 4. UI Functions (อัปเดตรูป และ สถานะ)
+// อัปเดตรูปอวาตาร์ตัวละคร
 function updateAvatar() {
     const context = SillyTavern.getContext();
     const charId = context.characterId;
@@ -81,28 +76,28 @@ function updateAvatar() {
     }
 }
 
+// อัปเดตสถานะและคะแนนของ Widget
 function updateWidgetState(status, score) {
     if (!settings.enabled) return;
     const widget = document.getElementById('st-rel-widget');
     const scorePopup = document.getElementById('st-rel-score-popup');
     if (!widget || !scorePopup) return;
 
-    widget.className = 'st-rel-glass'; // Reset class
+    widget.className = 'st-rel-glass';
     const validStates = ['normal', 'love', 'angry', 'sad', 'cry'];
     const safeStatus = validStates.includes(status) ? status : 'normal';
     widget.classList.add(`state-${safeStatus}`);
 
-    // ถ้ามีการเปลี่ยน Score ค่อยเด้งตัวเลข
     if (score !== 0 && !isNaN(score)) {
         scorePopup.classList.remove('score-animate', 'score-positive', 'score-negative');
-        void scorePopup.offsetWidth; // Force CSS reflow ให้เล่นอนิเมชันซ้ำได้
+        void scorePopup.offsetWidth; // Force Reflow
         scorePopup.textContent = score > 0 ? `+${score}` : `${score}`;
         scorePopup.classList.add('score-animate');
         scorePopup.classList.add(score > 0 ? 'score-positive' : 'score-negative');
     }
 }
 
-// 5. ระบบกระซิบ (Idle Bubble)
+// ระบบ Idle Whispers (กระซิบยามว่าง)
 function resetIdleTimer() {
     if (idleTimer) clearTimeout(idleTimer);
     hideBubble();
@@ -124,7 +119,7 @@ function hideBubble() {
     if (bubble) bubble.classList.remove('bubble-show');
 }
 
-// 6. ระบบแทรกและจัดการ Widget (Touch + Drag)
+// แทรก Widget ลงใน DOM พร้อมระบบ Drag (Mouse + Touch) และ Viewport Clamping
 function injectWidgetToDOM() {
     if (document.getElementById('st-rel-widget-container')) return;
 
@@ -193,7 +188,7 @@ function dragElement(elmnt) {
     }
 
     function dragMove(e) {
-        if(e.cancelable) e.preventDefault(); 
+        if(e.cancelable) e.preventDefault();
         const isTouch = e.type.includes('touch');
         const clientX = isTouch ? e.touches[0].clientX : e.clientX;
         const clientY = isTouch ? e.touches[0].clientY : e.clientY;
@@ -217,7 +212,7 @@ function dragElement(elmnt) {
     }
 }
 
-// 7. เมนูตั้งค่า (Settings UI)
+// สร้าง UI สำหรับเมนูตั้งค่าใน Extensions Panel พร้อมปุ่ม Reset ตำแหน่ง
 function injectSettingsUI() {
     const html = `
         <div class="inline-drawer">
@@ -259,12 +254,12 @@ function injectSettingsUI() {
     $('#st-rel-reset-btn').on('click', function() {
         if(window.stRelResetPosition) {
             window.stRelResetPosition();
-            toastr.success('ดึงตัวลอยกลับมาแล้ว!', 'Relationship Widget');
+            toastr.success('ดึงตัวลอยกลับมาที่หน้าจอแล้ว!', 'Relationship Widget');
         }
     });
 }
 
-// 8. Main Lifecycle (การรันเมื่อแอปพร้อม)
+// Main Lifecycle Setup
 jQuery(async () => {
     try {
         const context = SillyTavern.getContext();
@@ -277,34 +272,29 @@ jQuery(async () => {
         
         console.log("[ST-REL] Widget Initialized Successfully!");
 
-        // เมื่อแอปโหลดเสร็จ
         eventSource.on(event_types.APP_READY, () => { 
             updateAvatar(); 
             resetIdleTimer(); 
         });
 
-        // เมื่อเปลี่ยนแชท/เปลี่ยนตัวละคร ให้เช็คข้อความล่าสุดทันทีว่าสถานะเป็นอะไร
         eventSource.on(event_types.CHAT_CHANGED, () => { 
             updateAvatar(); 
             resetIdleTimer(); 
             
-            // ค้นหาข้อความสุดท้ายของตัวละคร เพื่อดึงสถานะเดิมมาโชว์
             const chat = context.chat;
             if (chat && chat.length > 0) {
-                // หาข้อความล่าสุดที่ไม่ใช่ของเรา
                 const lastCharMsg = [...chat].reverse().find(m => !m.is_user);
                 if (lastCharMsg && lastCharMsg.mes) {
                     const data = parseRelationshipData(lastCharMsg.mes);
                     if (data) {
-                        updateWidgetState(data.status, 0); // โชว์แค่สถานะ ไม่ต้องเด้งคะแนนเพราะเป็นแชทเก่า
+                        updateWidgetState(data.status, 0);
                         return;
                     }
                 }
             }
-            updateWidgetState('normal', 0); // ถ้าไม่มีข้อมูลเก่าเลย กลับเป็น normal
+            updateWidgetState('normal', 0);
         });
         
-        // เมื่อ AI พิมพ์ตอบกลับมาเสร็จสิ้น
         eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, (msgId) => {
             if (!settings.enabled) return;
             resetIdleTimer();
