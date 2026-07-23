@@ -13,20 +13,27 @@
 .st-rel-ios-toggle input:checked + .st-rel-slider { background-color: #34c759; }
 .st-rel-ios-toggle input:checked + .st-rel-slider:before { transform: translateX(20px); }
 
-/* Widget */
+/* Widget - ค่าเริ่มต้นสำหรับ Desktop */
 #st-rel-widget {
     position: fixed;
-    bottom: 100px;
-    right: 30px;
     width: 80px;
     height: 80px;
-    z-index: 2147483647; /* บังคับให้อยู่บนสุดเสมอ */
+    z-index: 2147483647; /* บังคับให้อยู่บนสุด ทะลุทุกสิ่ง */
     pointer-events: none;
+    touch-action: none; /* กันจอมือถือเลื่อนตอนลาก */
+}
+
+/* รองรับจอมือถือ (ปรับขนาดให้เล็กลง ไม่บังแชท) */
+@media screen and (max-width: 768px) {
+    #st-rel-widget {
+        width: 60px;
+        height: 60px;
+    }
 }
 
 .st-rel-glass {
     position: relative; width: 100%; height: 100%; border-radius: 50%;
-    background: rgba(0, 0, 0, 0.2); backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     border: 2px solid rgba(255, 255, 255, 0.3);
     box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     pointer-events: auto; cursor: grab;
@@ -34,7 +41,7 @@
 }
 .st-rel-glass:active { cursor: grabbing; transform: scale(0.9); }
 
-#st-rel-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; transition: filter 0.5s; }
+#st-rel-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; transition: filter 0.5s; pointer-events: none; }
 
 /* States */
 .state-normal { border-color: rgba(255,255,255,0.3); }
@@ -51,7 +58,7 @@
 .score-positive { background: #34c759 !important; }
 .score-negative { background: #ff3b30 !important; }
 
-#st-rel-bubble { position: absolute; bottom: 85px; right: 0; background: var(--SmartThemeBodyColor); color: var(--SmartThemeTextColor); padding: 8px 12px; border-radius: 12px 12px 0 12px; font-size: 12px; white-space: nowrap; opacity: 0; transform: scale(0.8); pointer-events: none; border: 1px solid var(--SmartThemeBorderColor); transition: all 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+#st-rel-bubble { position: absolute; bottom: calc(100% + 5px); right: 0; background: var(--SmartThemeBodyColor); color: var(--SmartThemeTextColor); padding: 8px 12px; border-radius: 12px 12px 0 12px; font-size: 12px; white-space: nowrap; opacity: 0; transform: scale(0.8); pointer-events: none; border: 1px solid var(--SmartThemeBorderColor); transition: all 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
 .bubble-show { opacity: 1 !important; transform: scale(1) !important; }
 
 @keyframes heartbeat { 0%, 30%, 60% { transform: scale(1); } 15%, 45% { transform: scale(1.1); } }
