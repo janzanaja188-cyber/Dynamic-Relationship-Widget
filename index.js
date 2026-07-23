@@ -5,7 +5,6 @@ const MODULE_NAME = 'st_relationship_widget';
 const defaultSettings = {
     enabled: true,
     idleEnabled: true,
-    logEnabled: true,
     position: { x: null, y: null }
 };
 
@@ -17,7 +16,7 @@ const idleWhispers = [
     "...", "Are you still there?", "Just looking at you...", "Thinking...", "*waits patiently*"
 ];
 
-// โหลดและเซฟตั้งค่า
+// 1. ระบบจัดการ Settings
 function loadSettings() {
     const context = SillyTavern.getContext();
     settings = Object.assign({}, defaultSettings, context.extensionSettings[MODULE_NAME]);
@@ -30,17 +29,48 @@ function saveSettings() {
     context.saveSettingsDebounced();
 }
 
-// Prompt Interceptor (ดักให้ AI พิมพ์ Status)
+// 2. PROMPT INTERCEPTOR (แอบยัดคำสั่งต่อท้ายข้อความ User)
+// ต้องประกาศเป็น Global Function ตามชื่อที่ระบุใน manifest.json
 window.relationshipWidgetInterceptor = function(chat, contextSize, abort, type) {
     if (!settings.enabled) return;
-    if (type !== 'chat' && type !== 'swipe') return;
+    if (type !== 'chat' && type !== 'swipe') return; // ทำงานเฉพาะตอนแชทหรือปัดเปลี่ยนข้อความ
 
-    const instruction = `\n\n[SYSTEM INSTRUCTION: At the very end of your response, you MUST append a hidden HTML comment containing the relationship status and score change. Format EXACTLY like this: \`<!-- [STATUS: normal] [SCORE: +10] --!>\`. Allowed states: normal, love, angry, sad, cry. Score: A number between -100 and +100. This MUST be inside the HTML comment at the bottom.]`;
+    const instruction = `\n\n[SYSTEM INSTRUCTION: At the very end of your response, you MUST append a hidden HTML comment containing the relationship status and score change. Format EXACTLY like this: <!-- [STATUS: normal] [SCORE: +10] -->. Allowed states: normal, love, angry, sad, cry. Score: A number between -100 and +100. This MUST be inside the HTML comment at the bottom.]`;
 
-    chat.push({ role: 'system', content: instruction });
+    let userMsgFound = false;
+    
+    // ค้นหาข้อความล่าสุดของ User แล้วเอาคำสั่งไปต่อท้าย
+    for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i].role === 'user') {
+            chat[i].content += instruction;
+            userMsgFound = true;
+            break;
+        }
+    }
+
+    // เผื่อหาไม่เจอ (กรณีแปลกๆ) ให้ยัดเป็น System ต่อท้ายสุดไปเลย
+    if (!userMsgFound) {
+        chat.push({ role: 'system', content: instruction });
+    }
 };
 
-// อัปเดตรูปอวาตาร์
+// 3. ฟังก์ชันสกัดหา Status และ Score จากข้อความ
+function parseRelationshipData(text) {
+    if (!text) return null;
+    // Regex ยืดหยุ่นขึ้น รองรับการเว้นวรรคแปลกๆ หรือรูปแบบ Comment ที่เพี้ยนนิดหน่อย
+    const regex = /<!--\s*\[?STATUS:\s*([a-zA-Z]+)\]?\s*\[?SCORE:\s*([\+\-]?\d+)\]?\s*--!?>/i;
+    const match = text.match(regex);
+
+    if (match) {
+        return {
+            status: match[1].toLowerCase(),
+            score: parseInt(match[2], 10)
+        };
+    }
+    return null;
+}
+
+// 4. UI Functions (อัปเดตรูป และ สถานะ)
 function updateAvatar() {
     const context = SillyTavern.getContext();
     const charId = context.characterId;
@@ -51,28 +81,28 @@ function updateAvatar() {
     }
 }
 
-// อัปเดตสถานะ (เปลี่ยนสี / อนิเมชัน)
 function updateWidgetState(status, score) {
     if (!settings.enabled) return;
     const widget = document.getElementById('st-rel-widget');
     const scorePopup = document.getElementById('st-rel-score-popup');
     if (!widget || !scorePopup) return;
 
-    widget.className = 'st-rel-glass';
+    widget.className = 'st-rel-glass'; // Reset class
     const validStates = ['normal', 'love', 'angry', 'sad', 'cry'];
     const safeStatus = validStates.includes(status) ? status : 'normal';
     widget.classList.add(`state-${safeStatus}`);
 
-    if (score !== 0) {
+    // ถ้ามีการเปลี่ยน Score ค่อยเด้งตัวเลข
+    if (score !== 0 && !isNaN(score)) {
         scorePopup.classList.remove('score-animate', 'score-positive', 'score-negative');
-        void scorePopup.offsetWidth; // Force reflow
+        void scorePopup.offsetWidth; // Force CSS reflow ให้เล่นอนิเมชันซ้ำได้
         scorePopup.textContent = score > 0 ? `+${score}` : `${score}`;
         scorePopup.classList.add('score-animate');
         scorePopup.classList.add(score > 0 ? 'score-positive' : 'score-negative');
     }
 }
 
-// ระบบเสียงกระซิบยามว่าง
+// 5. ระบบกระซิบ (Idle Bubble)
 function resetIdleTimer() {
     if (idleTimer) clearTimeout(idleTimer);
     hideBubble();
@@ -94,7 +124,7 @@ function hideBubble() {
     if (bubble) bubble.classList.remove('bubble-show');
 }
 
-// สร้าง Widget ใส่หน้าจอ
+// 6. ระบบแทรกและจัดการ Widget (Touch + Drag)
 function injectWidgetToDOM() {
     if (document.getElementById('st-rel-widget-container')) return;
 
@@ -113,25 +143,20 @@ function injectWidgetToDOM() {
     dragElement(document.getElementById("st-rel-widget"));
 }
 
-// ระบบลากย้ายแบบรองรับ Mobile Touch + ป้องกันหลุดจอ
 function dragElement(elmnt) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
 
-    // ฟังก์ชันจัดตำแหน่งให้อยู่ในจอเสมอ
     function applySafePosition(targetX, targetY) {
         const rect = elmnt.getBoundingClientRect();
-        // ถ้าซ่อนอยู่ ความกว้างจะเป็น 0 ให้เดาขนาดสำหรับมือถือ (60) หรือคอม (80)
         const w = rect.width || (window.innerWidth <= 768 ? 60 : 80);
         const h = rect.height || (window.innerWidth <= 768 ? 60 : 80);
 
         const maxX = Math.max(0, document.documentElement.clientWidth - w);
         const maxY = Math.max(0, document.documentElement.clientHeight - h);
 
-        // ค่าเริ่มต้นถ้าไม่เคยมีตำแหน่ง (มุมขวาล่าง เลี่ยงช่องแชท)
         let safeX = targetX !== null ? targetX : maxX - 20;
         let safeY = targetY !== null ? targetY : maxY - 100;
 
-        // บังคับไม่ให้หลุดจอ (Clamp)
         safeX = Math.max(0, Math.min(maxX, safeX));
         safeY = Math.max(0, Math.min(maxY, safeY));
 
@@ -143,10 +168,8 @@ function dragElement(elmnt) {
         return { x: safeX, y: safeY };
     }
 
-    // เซ็ตตำแหน่งตอนเปิดแอป
     settings.position = applySafePosition(settings.position.x, settings.position.y);
 
-    // สร้างฟังก์ชัน Reset ตำแหน่งให้เรียกจากปุ่มได้
     window.stRelResetPosition = function() {
         settings.position = applySafePosition(null, null);
         saveSettings();
@@ -170,8 +193,7 @@ function dragElement(elmnt) {
     }
 
     function dragMove(e) {
-        if(e.cancelable) e.preventDefault(); // ป้องกันจอมือถือเลื่อนตอนลากตัวละคร
-
+        if(e.cancelable) e.preventDefault(); 
         const isTouch = e.type.includes('touch');
         const clientX = isTouch ? e.touches[0].clientX : e.clientX;
         const clientY = isTouch ? e.touches[0].clientY : e.clientY;
@@ -181,10 +203,7 @@ function dragElement(elmnt) {
         pos3 = clientX;
         pos4 = clientY;
 
-        let newX = elmnt.offsetLeft - pos1;
-        let newY = elmnt.offsetTop - pos2;
-
-        applySafePosition(newX, newY);
+        applySafePosition(elmnt.offsetLeft - pos1, elmnt.offsetTop - pos2);
     }
 
     function dragEnd() {
@@ -198,7 +217,7 @@ function dragElement(elmnt) {
     }
 }
 
-// สร้างหน้าต่าง Settings ใส่กล่อง Extensions (เพิ่มปุ่ม Reset)
+// 7. เมนูตั้งค่า (Settings UI)
 function injectSettingsUI() {
     const html = `
         <div class="inline-drawer">
@@ -218,16 +237,6 @@ function injectSettingsUI() {
                             <span class="st-rel-slider"></span>
                         </label>
                     </div>
-                    <div class="st-rel-setting-row">
-                        <label class="st-rel-label">
-                            <span class="title">Idle Whispers</span>
-                            <span class="desc">ทักทายเมื่อปล่อยแชททิ้งไว้</span>
-                        </label>
-                        <label class="st-rel-ios-toggle">
-                            <input type="checkbox" id="st-rel-idle" ${settings.idleEnabled ? 'checked' : ''}>
-                            <span class="st-rel-slider"></span>
-                        </label>
-                    </div>
                     <div class="st-rel-setting-row" style="justify-content: center; margin-top: 15px;">
                         <button id="st-rel-reset-btn" class="menu_button" style="width: 100%;">
                             <i class="fa-solid fa-crosshairs"></i> ดึงตัวลอยกลับมา (Reset Position)
@@ -239,19 +248,10 @@ function injectSettingsUI() {
     `;
     $('#extensions_settings').append(html);
 
-    // Bind events
     $('#st-rel-enable').on('change', function() {
         settings.enabled = $(this).is(':checked');
         document.getElementById('st-rel-widget-container').style.display = settings.enabled ? 'block' : 'none';
-        if(settings.enabled && window.stRelResetPosition) {
-            window.stRelResetPosition(); // เผื่อเปิดแล้วหาไม่เจอ ดึงกลับมาให้เลย
-        }
-        saveSettings();
-        resetIdleTimer();
-    });
-    
-    $('#st-rel-idle').on('change', function() {
-        settings.idleEnabled = $(this).is(':checked');
+        if(settings.enabled && window.stRelResetPosition) window.stRelResetPosition();
         saveSettings();
         resetIdleTimer();
     });
@@ -259,12 +259,12 @@ function injectSettingsUI() {
     $('#st-rel-reset-btn').on('click', function() {
         if(window.stRelResetPosition) {
             window.stRelResetPosition();
-            toastr.success('ดึงตัวลอยกลับมาที่หน้าจอแล้ว!', 'Relationship Widget');
+            toastr.success('ดึงตัวลอยกลับมาแล้ว!', 'Relationship Widget');
         }
     });
 }
 
-// Main Setup เมื่อแอปพร้อม
+// 8. Main Lifecycle (การรันเมื่อแอปพร้อม)
 jQuery(async () => {
     try {
         const context = SillyTavern.getContext();
@@ -277,10 +277,34 @@ jQuery(async () => {
         
         console.log("[ST-REL] Widget Initialized Successfully!");
 
-        eventSource.on(event_types.APP_READY, () => { updateAvatar(); resetIdleTimer(); });
-        eventSource.on(event_types.CHAT_CHANGED, () => { updateAvatar(); updateWidgetState('normal', 0); resetIdleTimer(); });
+        // เมื่อแอปโหลดเสร็จ
+        eventSource.on(event_types.APP_READY, () => { 
+            updateAvatar(); 
+            resetIdleTimer(); 
+        });
+
+        // เมื่อเปลี่ยนแชท/เปลี่ยนตัวละคร ให้เช็คข้อความล่าสุดทันทีว่าสถานะเป็นอะไร
+        eventSource.on(event_types.CHAT_CHANGED, () => { 
+            updateAvatar(); 
+            resetIdleTimer(); 
+            
+            // ค้นหาข้อความสุดท้ายของตัวละคร เพื่อดึงสถานะเดิมมาโชว์
+            const chat = context.chat;
+            if (chat && chat.length > 0) {
+                // หาข้อความล่าสุดที่ไม่ใช่ของเรา
+                const lastCharMsg = [...chat].reverse().find(m => !m.is_user);
+                if (lastCharMsg && lastCharMsg.mes) {
+                    const data = parseRelationshipData(lastCharMsg.mes);
+                    if (data) {
+                        updateWidgetState(data.status, 0); // โชว์แค่สถานะ ไม่ต้องเด้งคะแนนเพราะเป็นแชทเก่า
+                        return;
+                    }
+                }
+            }
+            updateWidgetState('normal', 0); // ถ้าไม่มีข้อมูลเก่าเลย กลับเป็น normal
+        });
         
-        // ดักจับข้อความใหม่
+        // เมื่อ AI พิมพ์ตอบกลับมาเสร็จสิ้น
         eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, (msgId) => {
             if (!settings.enabled) return;
             resetIdleTimer();
@@ -289,19 +313,13 @@ jQuery(async () => {
             const message = chat.find(m => m._id === msgId || m.id === msgId) || chat[chat.length - 1];
             if (!message || message.is_user) return;
 
-            const regex = /<!--\s*\[?STATUS:\s*([a-zA-Z]+)\]?\s*\[?SCORE:\s*([\+\-]?\d+)\]?\s*--!?>/i;
-            const match = message.mes.match(regex);
-
-            if (match) {
-                const status = match[1].toLowerCase();
-                const score = parseInt(match[2], 10);
-                updateWidgetState(status, score);
+            const data = parseRelationshipData(message.mes);
+            if (data) {
+                updateWidgetState(data.status, data.score);
             }
         });
 
         eventSource.on(event_types.MESSAGE_SENT, resetIdleTimer);
-        
-        // ดึงกลับเข้าจออัตโนมัติเมื่อหมุนจอมือถือ
         window.addEventListener('resize', () => {
             if (settings.enabled && window.stRelResetPosition) window.stRelResetPosition();
         });
