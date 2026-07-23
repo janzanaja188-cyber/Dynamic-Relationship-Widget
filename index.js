@@ -16,7 +16,7 @@ const idleWhispers = [
     "...", "Are you still there?", "Just looking at you...", "Thinking...", "*waits patiently*"
 ];
 
-// โหลดและเซฟตั้งค่าผ่าน Context ของ SillyTavern
+// โหลดและเซฟตั้งค่า
 function loadSettings() {
     const context = SillyTavern.getContext();
     settings = Object.assign({}, defaultSettings, context.extensionSettings[MODULE_NAME]);
@@ -29,12 +29,12 @@ function saveSettings() {
     context.saveSettingsDebounced();
 }
 
-// Prompt Interceptor (บังคับแอบต่อท้ายข้อความ User เพื่อสั่ง AI ให้ส่ง Status และ Score)
+// Prompt Interceptor บังคับแทรกคำสั่งให้ AI ส่งสถานะ
 window.relationshipWidgetInterceptor = function(chat, contextSize, abort, type) {
     if (!settings.enabled) return;
     if (type !== 'chat' && type !== 'swipe') return;
 
-    const instruction = `\n\n[SYSTEM INSTRUCTION: At the very end of your response, you MUST append a hidden HTML comment containing the relationship status and score change. Format EXACTLY like this: \`<!-- [STATUS: normal] [SCORE: +10] -->\`. Allowed states: normal, love, angry, sad, cry. Score: A number between -100 and +100. This MUST be inside the HTML comment at the bottom.]`;
+    const instruction = `\n\n[SYSTEM INSTRUCTION: At the very end of your response, you MUST append a hidden HTML comment containing the relationship status and score change. Format EXACTLY like this: <!-- [STATUS: normal] [SCORE: +10] -->. Allowed states: normal, love, angry, sad, cry. Score: A number between -100 and +100.]`;
 
     let userMsgFound = false;
     for (let i = chat.length - 1; i >= 0; i--) {
@@ -50,10 +50,11 @@ window.relationshipWidgetInterceptor = function(chat, contextSize, abort, type) 
     }
 };
 
-// ฟังก์ชันแกะรอยหา Status และ Score จากข้อความของ AI
+// ฟังก์ชันแกะรอยหา Status และ Score (รองรับทุกรูปแบบ HTML Comment)
 function parseRelationshipData(text) {
     if (!text) return null;
-    const regex = /<!--\s*\[?STATUS:\s*([a-zA-Z]+)\]?\s*\[?SCORE:\s*([\+\-]?\d+)\]?\s*--!?>/i;
+    // Regex แบบยืดหยุ่นสูง รองรับทุกการเว้นวรรคและเครื่องหมาย
+    const regex = /<!--[\s\S]*?\[?STATUS:\s*([a-zA-Z]+)\]?[\s\S]*?\[?SCORE:\s*([\+\-]?\d+)\]?[\s\S]*?-->/i;
     const match = text.match(regex);
 
     if (match) {
@@ -65,7 +66,7 @@ function parseRelationshipData(text) {
     return null;
 }
 
-// อัปเดตรูปอวาตาร์ตัวละคร
+// อัปเดตรูปอวาตาร์
 function updateAvatar() {
     const context = SillyTavern.getContext();
     const charId = context.characterId;
@@ -76,7 +77,7 @@ function updateAvatar() {
     }
 }
 
-// อัปเดตสถานะและคะแนนของ Widget
+// อัปเดตสถานะ Widget และ Score Popup
 function updateWidgetState(status, score) {
     if (!settings.enabled) return;
     const widget = document.getElementById('st-rel-widget');
@@ -119,7 +120,7 @@ function hideBubble() {
     if (bubble) bubble.classList.remove('bubble-show');
 }
 
-// แทรก Widget ลงใน DOM พร้อมระบบ Drag (Mouse + Touch) และ Viewport Clamping
+// สร้าง Widget ใส่ DOM พร้อมระบบลาก (Mouse + Touch) และป้องกันตกขอบ
 function injectWidgetToDOM() {
     if (document.getElementById('st-rel-widget-container')) return;
 
@@ -212,10 +213,12 @@ function dragElement(elmnt) {
     }
 }
 
-// สร้าง UI สำหรับเมนูตั้งค่าใน Extensions Panel พร้อมปุ่ม Reset ตำแหน่ง
+// สร้าง Settings UI และปุ่ม Reset ตำแหน่ง
 function injectSettingsUI() {
+    if (document.getElementById('st-rel-settings-drawer')) return;
+
     const html = `
-        <div class="inline-drawer">
+        <div class="inline-drawer" id="st-rel-settings-drawer">
             <div class="inline-drawer-toggle inline-drawer-header">
                 <b><i class="fa-solid fa-heart"></i> Relationship Widget</b>
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
@@ -259,7 +262,7 @@ function injectSettingsUI() {
     });
 }
 
-// Main Lifecycle Setup
+// Main Setup Lifecycle
 jQuery(async () => {
     try {
         const context = SillyTavern.getContext();
