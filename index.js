@@ -113,45 +113,92 @@ function injectWidgetToDOM() {
     dragElement(document.getElementById("st-rel-widget"));
 }
 
-// ระบบลากย้าย
+// ระบบลากย้ายแบบรองรับ Mobile Touch + ป้องกันหลุดจอ
 function dragElement(elmnt) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    elmnt.onmousedown = dragMouseDown;
 
-    if (settings.position.x && settings.position.y) {
-        elmnt.style.top = settings.position.y + "px";
-        elmnt.style.left = settings.position.x + "px";
+    // ฟังก์ชันจัดตำแหน่งให้อยู่ในจอเสมอ
+    function applySafePosition(targetX, targetY) {
+        const rect = elmnt.getBoundingClientRect();
+        // ถ้าซ่อนอยู่ ความกว้างจะเป็น 0 ให้เดาขนาดสำหรับมือถือ (60) หรือคอม (80)
+        const w = rect.width || (window.innerWidth <= 768 ? 60 : 80);
+        const h = rect.height || (window.innerWidth <= 768 ? 60 : 80);
+
+        const maxX = Math.max(0, document.documentElement.clientWidth - w);
+        const maxY = Math.max(0, document.documentElement.clientHeight - h);
+
+        // ค่าเริ่มต้นถ้าไม่เคยมีตำแหน่ง (มุมขวาล่าง เลี่ยงช่องแชท)
+        let safeX = targetX !== null ? targetX : maxX - 20;
+        let safeY = targetY !== null ? targetY : maxY - 100;
+
+        // บังคับไม่ให้หลุดจอ (Clamp)
+        safeX = Math.max(0, Math.min(maxX, safeX));
+        safeY = Math.max(0, Math.min(maxY, safeY));
+
+        elmnt.style.left = safeX + "px";
+        elmnt.style.top = safeY + "px";
         elmnt.style.bottom = "auto";
         elmnt.style.right = "auto";
+
+        return { x: safeX, y: safeY };
     }
 
-    function dragMouseDown(e) {
-        e.preventDefault();
-        pos3 = e.clientX;
-        pos4 = e.clientY;
-        document.onmouseup = closeDragElement;
-        document.onmousemove = elementDrag;
+    // เซ็ตตำแหน่งตอนเปิดแอป
+    settings.position = applySafePosition(settings.position.x, settings.position.y);
+
+    // สร้างฟังก์ชัน Reset ตำแหน่งให้เรียกจากปุ่มได้
+    window.stRelResetPosition = function() {
+        settings.position = applySafePosition(null, null);
+        saveSettings();
+    };
+
+    elmnt.onmousedown = dragStart;
+    elmnt.ontouchstart = dragStart;
+
+    function dragStart(e) {
+        const isTouch = e.type.includes('touch');
+        const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+        const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+        pos3 = clientX;
+        pos4 = clientY;
+
+        document.addEventListener('mouseup', dragEnd);
+        document.addEventListener('mousemove', dragMove, { passive: false });
+        document.addEventListener('touchend', dragEnd);
+        document.addEventListener('touchmove', dragMove, { passive: false });
     }
 
-    function elementDrag(e) {
-        e.preventDefault();
-        pos1 = pos3 - e.clientX;
-        pos2 = pos4 - e.clientY;
-        pos3 = e.clientX;
-        pos4 = e.clientY;
-        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
-        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+    function dragMove(e) {
+        if(e.cancelable) e.preventDefault(); // ป้องกันจอมือถือเลื่อนตอนลากตัวละคร
+
+        const isTouch = e.type.includes('touch');
+        const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+        const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+        pos1 = pos3 - clientX;
+        pos2 = pos4 - clientY;
+        pos3 = clientX;
+        pos4 = clientY;
+
+        let newX = elmnt.offsetLeft - pos1;
+        let newY = elmnt.offsetTop - pos2;
+
+        applySafePosition(newX, newY);
     }
 
-    function closeDragElement() {
-        document.onmouseup = null;
-        document.onmousemove = null;
+    function dragEnd() {
+        document.removeEventListener('mouseup', dragEnd);
+        document.removeEventListener('mousemove', dragMove);
+        document.removeEventListener('touchend', dragEnd);
+        document.removeEventListener('touchmove', dragMove);
+
         settings.position = { x: elmnt.offsetLeft, y: elmnt.offsetTop };
         saveSettings();
     }
 }
 
-// สร้างหน้าต่าง Settings ใส่กล่อง Extensions
+// สร้างหน้าต่าง Settings ใส่กล่อง Extensions (เพิ่มปุ่ม Reset)
 function injectSettingsUI() {
     const html = `
         <div class="inline-drawer">
@@ -181,6 +228,11 @@ function injectSettingsUI() {
                             <span class="st-rel-slider"></span>
                         </label>
                     </div>
+                    <div class="st-rel-setting-row" style="justify-content: center; margin-top: 15px;">
+                        <button id="st-rel-reset-btn" class="menu_button" style="width: 100%;">
+                            <i class="fa-solid fa-crosshairs"></i> ดึงตัวลอยกลับมา (Reset Position)
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -191,13 +243,24 @@ function injectSettingsUI() {
     $('#st-rel-enable').on('change', function() {
         settings.enabled = $(this).is(':checked');
         document.getElementById('st-rel-widget-container').style.display = settings.enabled ? 'block' : 'none';
+        if(settings.enabled && window.stRelResetPosition) {
+            window.stRelResetPosition(); // เผื่อเปิดแล้วหาไม่เจอ ดึงกลับมาให้เลย
+        }
         saveSettings();
         resetIdleTimer();
     });
+    
     $('#st-rel-idle').on('change', function() {
         settings.idleEnabled = $(this).is(':checked');
         saveSettings();
         resetIdleTimer();
+    });
+
+    $('#st-rel-reset-btn').on('click', function() {
+        if(window.stRelResetPosition) {
+            window.stRelResetPosition();
+            toastr.success('ดึงตัวลอยกลับมาที่หน้าจอแล้ว!', 'Relationship Widget');
+        }
     });
 }
 
@@ -237,6 +300,11 @@ jQuery(async () => {
         });
 
         eventSource.on(event_types.MESSAGE_SENT, resetIdleTimer);
+        
+        // ดึงกลับเข้าจออัตโนมัติเมื่อหมุนจอมือถือ
+        window.addEventListener('resize', () => {
+            if (settings.enabled && window.stRelResetPosition) window.stRelResetPosition();
+        });
 
     } catch (error) {
         console.error("[ST-REL] Error starting widget:", error);
