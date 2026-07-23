@@ -1,8 +1,8 @@
 {
     "display_name": "Dynamic Relationship Widget",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "author": "SillyTavern Extension Architect",
-    "description": "Floating iOS-style relationship tracker parsing hidden HTML comments.",
+    "description": "Floating relationship tracker.",
     "js": "index.js",
     "css": "style.css",
     "generate_interceptor": "relationshipWidgetInterceptor",
