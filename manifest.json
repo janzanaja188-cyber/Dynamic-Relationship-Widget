@@ -1,11 +1,15 @@
 {
-    "display_name": "Relationship Widget",
-    "version": "1.4.0",
-    "author": "ST Extension Architect",
+    "display_name": "iOS Status Dashboard & Lorebook",
     "loading_order": 50,
     "js": "index.js",
     "css": "style.css",
-    "generate_interceptor": "relationshipWidgetInterceptor",
+    "author": "ST Extension Architect",
+    "version": "1.0.0",
     "auto_update": false,
-    "homePage": ""
+    "homePage": "",
+    "requires": [],
+    "generate_interceptor": "injectStatusLorebook",
+    "hooks": {
+        "activate": "initStatusUI"
+    }
 }
