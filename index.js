@@ -1,491 +1,205 @@
-// path: public/scripts/extensions/third-party/st-relationship-widget/index.js
+// path: public/scripts/extensions/third-party/ios-status-lorebook/index.js
 
-const MODULE_NAME = 'st_relationship_widget_v3';
+import { getContext } from "../../../../extensions.js";
 
-// 1. ค่าเริ่มต้นและการจัดเก็บข้อมูล
+const MODULE_NAME = 'ios_status_lorebook_system';
+
+// ค่าเริ่มต้น (เริ่มจากไม่รู้จัก ตามที่คุณบรีฟ)
 const defaultSettings = {
-    enabled: true,
-    minimalMode: false,
-    position: { x: null, y: null },
-    charData: {} // รูปแบบ: { "charId": { score: 0, level: 1, history: [], lastInteraction: timestamp } }
+    level: 1,
+    exp: 0,
+    statusName: "ไม่รู้จัก (Stranger)"
 };
 
 let settings = {};
-let idleTimer = null;
-const IDLE_TIMEOUT_MS = 45000; // 45 วินาที
-const THAI_WHISPERS = [
-    "เงียบจังเลย...", "มองอะไรอยู่คะ?", "แอบมองอยู่นะ...", "รอฟังอยู่นะ...", "คิดอะไรอยู่หรือเปล่า?"
-];
 
-// โครงสร้างเลเวลเกม (1, 2, 3)
-const LEVEL_THRESHOLDS = [
-    { level: 1, name: "คนแปลกหน้า", min: -100, max: 20 },
-    { level: 2, name: "คนรู้จัก", min: 21, max: 50 },
-    { level: 3, name: "เพื่อนสนิท", min: 51, max: 80 },
-    { level: 4, name: "คนพิเศษ", min: 81, max: 100 }
-];
+// -----------------------------------------------------------------------
+// 1. ระบบ Injection (ฝังกฎลงไปในสมอง AI ทุกรอบ เหมือน Lorebook ที่มองไม่เห็น)
+// -----------------------------------------------------------------------
+window.iosStatusLorebookInterceptor = function(chat, contextSize, abort, type) {
+    // ป้องกันการแทรกเวลาเจนอย่างอื่นที่ไม่ใช่แชทปกติ
+    if (type !== 'chat') return; 
 
+    const currentLevel = settings.level;
+    const currentExp = settings.exp;
+    const currentStatus = settings.statusName;
+
+    // กฎที่เข้มงวด (Lorebook) บังคับให้ AI ประเมินและเลือกสถานะเอง
+    const lorebookSystemNote = `[SYSTEM LOREBOOK & MECHANIC OVERRIDE:
+1. RELATIONSHIP SYSTEM: The character and user currently have a relationship level of ${currentLevel} (EXP: ${currentExp}/100).
+2. CURRENT STATUS: "${currentStatus}". (Default base is "Stranger").
+3. MECHANIC (STRICT): The character MUST organically evaluate the user's latest actions. Progression is HIGHLY REALISTIC and HARD. Trust or affection is NOT easily earned. If the user acts rude, weird, or pushy, the character MUST penalize them with negative EXP and negative statuses. Nothing comes easy.
+4. THE 50+ STATUS SPECTRUM: The character processes a deep emotional spectrum (over 50+ distinct nuanced states). You MUST independently pick a specific word reflecting their true current feeling. 
+   - Negative examples: Disgusted, Repulsed, Terrified, Enraged, Annoyed, Suspicious, Cautious, Betrayed, Cold, Distant.
+   - Neutral examples: Stranger, Indifferent, Observant, Polite.
+   - Positive examples (HARD TO EARN): Amused, Intrigued, Fond, Trusting, Loyal, Devoted, Infatuated.
+5. MANDATORY OUTPUT: You MUST append EXACTLY this HTML comment at the VERY END of your response to update the system. Replace the brackets with your chosen values.
+   FORMAT: <!-- [STATUS: <Your Chosen Nuanced Status in Thai or English>] [EXP: <+ or - number>] -->
+   EXAMPLE: <!-- [STATUS: รังเกียจ (Disgusted)] [EXP: -15] -->]`;
+
+    // แทรกโน้ตนี้ไปที่ Depth 0 (ลึกสุด) ให้ AI ให้น้ำหนักสูงสุดเทียบเท่า System Prompt
+    chat.push({
+        name: 'System',
+        is_user: true,
+        is_system: true,
+        mes: lorebookSystemNote
+    });
+};
+
+// -----------------------------------------------------------------------
+// 2. ฟังก์ชันโหลด/เซฟ ตั้งค่า
+// -----------------------------------------------------------------------
 function loadSettings() {
-    const context = SillyTavern.getContext();
-    settings = Object.assign({}, defaultSettings, context.extensionSettings[MODULE_NAME]);
-    if (!settings.charData) settings.charData = {};
-    context.extensionSettings[MODULE_NAME] = settings;
+    const context = getContext();
+    const stored = context.extensionSettings[MODULE_NAME] || {};
+    settings = Object.assign({}, defaultSettings, stored);
 }
 
 function saveSettings() {
-    const context = SillyTavern.getContext();
+    const context = getContext();
     context.extensionSettings[MODULE_NAME] = settings;
     context.saveSettingsDebounced();
 }
 
-function getCharData(charId) {
-    if (!settings.charData[charId]) {
-        settings.charData[charId] = { score: 0, level: 1, history: [], lastInteraction: Date.now(), hiddenState: null };
-    }
-    return settings.charData[charId];
+// -----------------------------------------------------------------------
+// 3. ฟังก์ชันสร้าง UI (iOS Bottom Sheet & Floating Button)
+// -----------------------------------------------------------------------
+function setupUI() {
+    // ลบของเก่าถ้ามี (เผื่อ Reload)
+    $('#ios-status-fab').remove();
+    $('#ios-status-bottom-sheet').remove();
+
+    // 3.1 สร้างปุ่มลอย
+    const fabHtml = `
+        <div id="ios-status-fab">
+            <span>❤️</span> <span>Status</span>
+        </div>
+    `;
+    $('body').append(fabHtml);
+
+    // 3.2 สร้าง Bottom Sheet
+    const sheetHtml = `
+        <div id="ios-status-bottom-sheet">
+            <div class="ios-drag-handle"></div>
+            <div class="ios-status-content">
+                <div class="ios-status-title">Current Relationship</div>
+                <div class="ios-status-current" id="ios-status-text">${settings.statusName}</div>
+                
+                <div class="ios-exp-container">
+                    <div class="ios-exp-bar" id="ios-exp-bar"></div>
+                </div>
+                <div class="ios-exp-text">Level <span id="ios-level-text">${settings.level}</span> | EXP: <span id="ios-exp-value">${settings.exp}</span> / 100</div>
+                
+                <button class="ios-close-btn" id="ios-sheet-close">Done</button>
+            </div>
+        </div>
+    `;
+    $('body').append(sheetHtml);
+
+    // อัปเดต UI ครั้งแรก
+    updateUI();
+
+    // 3.3 ผูก Event ปุ่มเปิด/ปิด
+    $('#ios-status-fab').on('click', () => {
+        $('#ios-status-bottom-sheet').addClass('open');
+    });
+
+    $('#ios-sheet-close, .ios-drag-handle').on('click', () => {
+        $('#ios-status-bottom-sheet').removeClass('open');
+    });
 }
 
-// 5. ระบบเสื่อมถอยความสัมพันธ์ (Decay System)
-function processDecay(charId) {
-    const data = getCharData(charId);
-    const now = Date.now();
-    const daysPassed = (now - data.lastInteraction) / (1000 * 60 * 60 * 24);
+function updateUI() {
+    $('#ios-status-text').text(settings.statusName);
+    $('#ios-level-text').text(settings.level);
+    $('#ios-exp-value').text(settings.exp);
     
-    if (daysPassed > 3 && data.score > 0) {
-        const decayAmount = Math.floor(daysPassed) * 2; // ลดวันละ 2 แต้ม
-        data.score = Math.max(0, data.score - decayAmount);
-        toastr.info(`ไม่ได้คุยกันนาน ความสัมพันธ์ลดลง ${decayAmount} แต้ม`, 'Relationship Decay');
-    }
-    data.lastInteraction = now;
-    saveSettings();
-}
+    // คำนวณเปอร์เซ็นต์หลอด EXP (จำกัด 0-100 สำหรับหลอด)
+    let percent = (settings.exp % 100);
+    if (percent < 0) percent = 0; // ถ้าติดลบให้หลอดว่าง
+    $('#ios-exp-bar').css('width', `${percent}%`);
 
-// 4 & 14. ระบบแทรกคำสั่ง (Lorebook Style Injection + Jealousy)
-window.relationshipWidgetInterceptor = function(chat, contextSize, abort, type) {
-    if (!settings.enabled || (type !== 'chat' && type !== 'swipe')) return;
-
-    const context = SillyTavern.getContext();
-    const charId = context.characterId;
-    if (!charId) return;
-
-    const cData = getCharData(charId);
-    let extraPrompt = "";
-
-    // ระบบความทรงจำพิเศษ (Milestone)
-    if (cData.level >= 4 && cData.score > 90) {
-        extraPrompt += " [ข้อความลับ: {{char}} รู้สึกคลั่งรักและผูกพันกับผู้ใช้มากๆ] ";
-        cData.hiddenState = 'obsessed';
-    }
-
-    // ระบบหึงหวง (Jealousy - Group Chat)
-    if (context.groupId) {
-        let maxScore = -100;
-        let rivalName = "";
-        // หาคนที่คะแนนเยอะสุดในกลุ่ม
-        for (const [id, data] of Object.entries(settings.charData)) {
-            if (id !== charId && context.characters[id] && data.score > maxScore) {
-                maxScore = data.score;
-                rivalName = context.characters[id].name;
-            }
-        }
-        if (maxScore > cData.score + 30) {
-            extraPrompt += ` [ข้อความลับ: {{char}} รู้สึกหึงหวงและน้อยใจที่ผู้ใช้สนิทกับ ${rivalName} มากกว่า] `;
-        }
-    }
-
-    // คำสั่งหลักภาษาไทย
-    const corePrompt = `\n\n[คำสั่งระบบ: ประเมินความรู้สึกของ {{char}} ที่มีต่อผู้ใช้ในขณะนี้ และแนบสถานะไว้ท้ายสุดของข้อความในรูปแบบ <!-- [STATUS: สถานะ] [SCORE: คะแนน] --> (สถานะที่อนุญาต: normal, love, angry, sad, cry) (คะแนนสะสม: -100 ถึง +100)${extraPrompt}]`;
-
-    // แทรก (Splice) ไว้เหนือข้อความสุดท้ายของผู้ใช้ (Lorebook position)
-    const lastUserIndex = chat.findLastIndex(m => m.is_user);
-    if (lastUserIndex !== -1) {
-        chat.splice(lastUserIndex, 0, { role: 'system', content: corePrompt, name: 'system' });
+    // เปลี่ยนสีตามอารมณ์ (แง่ลบ แง่บวก)
+    if (settings.exp < 0) {
+        $('#ios-status-text').css('color', '#4a4e69'); // สีทึมๆ ถ้าแย่
+        $('#ios-exp-bar').css('background', 'linear-gradient(90deg, #9d0208 0%, #d00000 100%)'); // สีแดงเข้ม
     } else {
-        chat.push({ role: 'system', content: corePrompt, name: 'system' });
+        $('#ios-status-text').css('color', '#ff4d6d');
+        $('#ios-exp-bar').css('background', 'linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%)');
     }
-};
+}
 
-// อ่านข้อมูลจากข้อความ AI
-function parseRelationshipData(text, charId) {
-    if (!text) return null;
-    const regex = /<!--\s*\[STATUS:\s*([a-zA-Z]+)\]\s*\[SCORE:\s*([\+\-]?\d+)\]\s*-->/i;
-    // Fallback เผื่อ AI ลืมใส่ HTML Comment
-    const fallbackRegex = /\[STATUS:\s*([a-zA-Z]+)\]\s*\[SCORE:\s*([\+\-]?\d+)\]/i;
-    
-    let match = text.match(regex) || text.match(fallbackRegex);
+// -----------------------------------------------------------------------
+// 4. ระบบตรวจจับข้อความและซ่อน Tag จากหน้าจอแชท
+// -----------------------------------------------------------------------
+function processIncomingMessage(messageId) {
+    const context = getContext();
+    const chat = context.chat;
+    const lastMes = chat[chat.length - 1];
+
+    if (!lastMes || lastMes.is_user) return; // ทำงานเฉพาะข้อความตัวละคร
+
+    // Regex จับ Tag: <!-- [STATUS: xxx] [EXP: +yy] -->
+    const statusRegex = /<!--\s*\[STATUS:\s*(.*?)]\s*\[EXP:\s*([+-]?\d+)]\s*-->/i;
+    const match = lastMes.mes.match(statusRegex);
+
     if (match) {
-        const status = match[1].toLowerCase();
-        let newScore = parseInt(match[2], 10);
-        
-        // อัปเดตข้อมูล
-        const data = getCharData(charId);
-        data.score = Math.max(-100, Math.min(100, newScore));
-        data.lastInteraction = Date.now();
-        
-        // เช็คเลเวลอัป
-        const oldLevel = data.level;
-        const newLevelData = LEVEL_THRESHOLDS.find(t => data.score >= t.min && data.score <= t.max) || LEVEL_THRESHOLDS[0];
-        data.level = newLevelData.level;
+        const newStatus = match[1].trim();
+        const expChange = parseInt(match[2], 10);
 
-        // บันทึกประวัติ (History สำหรับกราฟ - เก็บ 10 ครั้งล่าสุด)
-        const today = new Date().toLocaleDateString('th-TH');
-        if (data.history.length === 0 || data.history[data.history.length - 1].date !== today) {
-            data.history.push({ date: today, score: data.score });
-            if (data.history.length > 10) data.history.shift();
-        } else {
-            data.history[data.history.length - 1].score = data.score;
+        // อัปเดต State
+        settings.statusName = newStatus;
+        settings.exp += expChange;
+        
+        // ระบบ Level (อัปเกรด/ดาวน์เกรด)
+        if (settings.exp >= 100) {
+            settings.level += 1;
+            settings.exp = settings.exp - 100;
+        } else if (settings.exp < 0 && settings.level > 1) {
+            settings.level -= 1;
+            settings.exp = 100 + settings.exp; // ถอยกลับไปหลอดของเวลก่อนหน้า
         }
 
         saveSettings();
+        updateUI();
+
+        // เล่นอนิเมชันตอนแต้มเปลี่ยน
+        showFloatingEmoji(expChange >= 0 ? '✨' : '💔');
+
+        // สำคัญมาก: ลบ Tag ออกจากข้อความเพื่อไม่ให้รกตา User
+        lastMes.mes = lastMes.mes.replace(statusRegex, '').trim();
         
-        // Effect ตอนเลเวลอัป
-        if (data.level > oldLevel) {
-            toastr.success(`ความสัมพันธ์เพิ่มขึ้นเป็นเลเวล ${data.level}!`, 'Level Up!');
-            spawnParticles('love');
-        }
-
-        return { status, score: data.score };
+        // บังคับให้ ST Render ข้อความที่โดนลบ Tag แล้วใหม่
+        const formattedText = context.DOMPurify.sanitize(context.marked.parse(lastMes.mes));
+        $(`.mes[mesid="${messageId}"] .mes_text`).html(formattedText);
     }
-    return null;
 }
 
-// 6 & 7. Visual Effects
-function spawnParticles(type) {
-    const container = document.getElementById('st-rel-particles-container');
-    if (!container) return;
-    const emojis = type === 'love' ? ['💖', '✨', '🌸'] : type === 'sad' ? ['💧', '🌧️'] : ['💢', '🔥'];
+function showFloatingEmoji(emoji) {
+    const fab = $('#ios-status-fab');
+    if (fab.length === 0) return;
     
-    for (let i = 0; i < 20; i++) {
-        const p = document.createElement('div');
-        p.className = 'particle';
-        p.innerText = emojis[Math.floor(Math.random() * emojis.length)];
-        p.style.left = Math.random() * 100 + 'vw';
-        p.style.fontSize = (Math.random() * 20 + 10) + 'px';
-        p.style.animationDuration = (Math.random() * 2 + 2) + 's';
-        container.appendChild(p);
-        setTimeout(() => p.remove(), 4000);
-    }
+    const offset = fab.offset();
+    const el = $(`<div class="floating-emoji">${emoji}</div>`);
+    el.css({
+        top: offset.top - 20,
+        left: offset.left + 20
+    });
+    $('body').append(el);
+    setTimeout(() => el.remove(), 1000); // ลบ DOM ทิ้งหลังอนิเมชันจบ
 }
 
-function updateScreenTint(status) {
-    const tint = document.getElementById('st-rel-screen-tint');
-    if (!tint) return;
-    const colors = {
-        angry: 'rgba(255, 59, 48, 0.15)',
-        sad: 'rgba(90, 200, 250, 0.1)',
-        cry: 'rgba(0, 122, 255, 0.15)',
-        obsessed: 'rgba(175, 82, 222, 0.1)'
-    };
-    tint.style.backgroundColor = colors[status] || 'rgba(0,0,0,0)';
-}
-
-function updateWidgetUI() {
-    if (!settings.enabled) return;
-    const context = SillyTavern.getContext();
-    const charId = context.characterId;
-    const widget = document.getElementById('st-rel-widget');
-    const avatarImg = document.getElementById('st-rel-avatar');
+// -----------------------------------------------------------------------
+// 5. Hooks ตอนเริ่มต้น
+// -----------------------------------------------------------------------
+jQuery(function () {
+    const context = getContext();
     
-    if (!widget) return;
-    widget.classList.toggle('minimal-mode', settings.minimalMode);
-
-    if (charId !== undefined && context.characters[charId]) {
-        avatarImg.src = `/characters/${context.characters[charId].avatar}`;
-        const data = getCharData(charId);
-        
-        // อัปเดตสถานะที่โชว์
-        const validStates = ['normal', 'love', 'angry', 'sad', 'cry', 'obsessed'];
-        const displayStatus = data.hiddenState === 'obsessed' ? 'obsessed' : 'normal';
-        widget.className = `st-rel-glass state-${displayStatus}`;
-        updateScreenTint(displayStatus);
-    }
-}
-
-// 3. Thai Whispers Bubble
-function resetIdleTimer() {
-    if (idleTimer) clearTimeout(idleTimer);
-    const bubble = document.getElementById('st-rel-bubble');
-    if (bubble) bubble.classList.remove('bubble-show');
-    
-    if (settings.enabled) {
-        idleTimer = setTimeout(() => {
-            if (!bubble) return;
-            bubble.textContent = THAI_WHISPERS[Math.floor(Math.random() * THAI_WHISPERS.length)];
-            bubble.classList.add('bubble-show');
-            setTimeout(() => bubble.classList.remove('bubble-show'), 6000);
-        }, IDLE_TIMEOUT_MS);
-    }
-}
-
-// --- การฉีด UI เข้าเว็บ (Injection) ---
-function injectCoreUI() {
-    if (document.getElementById('st-rel-widget')) return;
-
-    // FX Containers
-    const tint = document.createElement('div'); tint.id = 'st-rel-screen-tint';
-    const parts = document.createElement('div'); parts.id = 'st-rel-particles-container';
-    document.body.appendChild(tint); document.body.appendChild(parts);
-
-    // Widget
-    const widget = document.createElement('div');
-    widget.id = 'st-rel-widget';
-    widget.style.display = settings.enabled ? 'block' : 'none';
-    widget.innerHTML = `
-        <div class="st-rel-glass state-normal">
-            <img id="st-rel-avatar" src="" alt=""/>
-            <div id="st-rel-bubble"></div>
-        </div>
-    `;
-    document.body.appendChild(widget);
-
-    // Dashboard
-    const dashboard = document.createElement('div');
-    dashboard.id = 'st-rel-dashboard';
-    dashboard.innerHTML = `
-        <div class="dash-header">
-            <h3>ความสัมพันธ์</h3>
-            <div class="dash-close" onclick="document.getElementById('st-rel-dashboard').classList.remove('dash-open')"><i class="fa-solid fa-xmark"></i></div>
-        </div>
-        <div class="dash-tabs">
-            <div class="dash-tab active" data-target="tab-status">สถานะ</div>
-            <div class="dash-tab" data-target="tab-graph">กราฟ</div>
-            <div class="dash-tab" data-target="tab-settings">ตั้งค่า</div>
-        </div>
-        <div id="tab-status" class="dash-content active"></div>
-        <div id="tab-graph" class="dash-content"></div>
-        <div id="tab-settings" class="dash-content">
-            <button class="ios-btn" id="btn-toggle-minimal">โหมดซ่อนรูป (Minimal)</button>
-            <button class="ios-btn" id="btn-export-data">Export เซฟข้อมูล</button>
-            <button class="ios-btn danger" id="btn-reset-pos">ดึงตัวลอยกลับหน้าจอ</button>
-        </div>
-    `;
-    document.body.appendChild(dashboard);
-
-    setupDraggable(widget);
-    setupDashboardEvents();
-}
-
-function setupDashboardEvents() {
-    // Tabs
-    $('.dash-tab').on('click', function() {
-        $('.dash-tab').removeClass('active');
-        $(this).addClass('active');
-        $('.dash-content').removeClass('active');
-        $('#' + $(this).data('target')).addClass('active');
-        if($(this).data('target') === 'tab-graph') renderGraph();
-    });
-
-    $('#btn-toggle-minimal').on('click', () => {
-        settings.minimalMode = !settings.minimalMode;
-        saveSettings(); updateWidgetUI();
-        toastr.success(settings.minimalMode ? 'เปิดโหมด Minimal' : 'ปิดโหมด Minimal');
-    });
-
-    $('#btn-export-data').on('click', () => {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(settings.charData));
-        const dlAnchorElem = document.createElement('a');
-        dlAnchorElem.setAttribute("href", dataStr);
-        dlAnchorElem.setAttribute("download", "st_relationship_backup.json");
-        dlAnchorElem.click();
-    });
-
-    $('#btn-reset-pos').on('click', () => {
-        if(window.stRelResetPosition) window.stRelResetPosition();
-    });
-}
-
-function renderDashboardData() {
-    const context = SillyTavern.getContext();
-    const charId = context.characterId;
-    if (!charId) return;
-
-    const data = getCharData(charId);
-    const lvlInfo = LEVEL_THRESHOLDS.find(t => t.level === data.level) || LEVEL_THRESHOLDS[0];
-    const progressPct = ((data.score - lvlInfo.min) / (lvlInfo.max - lvlInfo.min)) * 100;
-
-    let html = `
-        <div class="status-card">
-            <img src="/characters/${context.characters[charId].avatar}">
-            <div class="status-info">
-                <h4>${context.characters[charId].name}</h4>
-                <div class="level-badge ${data.level === 4 ? 'max-level' : ''}">Level ${data.level}: ${lvlInfo.name}</div>
-                <div class="progress-bg"><div class="progress-fill" style="width: ${Math.max(0, Math.min(100, progressPct))}%;"></div></div>
-                <div class="progress-text"><span>แต้ม: ${data.score}</span> <span>MAX: ${lvlInfo.max}</span></div>
-            </div>
-        </div>
-    `;
-    
-    // Group support (โชว์คนอื่นในกลุ่มด้วยถ้ามี)
-    if (context.groupId && context.groups[context.groupId]) {
-        html += `<h5 style="margin: 15px 0 5px 0; opacity: 0.7;">สมาชิกในปาร์ตี้</h5>`;
-        context.groups[context.groupId].members.forEach(memberId => {
-            if (memberId !== charId && context.characters[memberId]) {
-                const mData = getCharData(memberId);
-                html += `<div style="display:flex; justify-content:space-between; font-size:13px; padding:5px; background:rgba(255,255,255,0.05); margin-bottom:2px; border-radius:6px;">
-                    <span>${context.characters[memberId].name}</span> <span>Lv.${mData.level} (แต้ม: ${mData.score})</span>
-                </div>`;
-            }
-        });
-    }
-    $('#tab-status').html(html);
-}
-
-function renderGraph() {
-    const context = SillyTavern.getContext();
-    if (!context.characterId) return;
-    const data = getCharData(context.characterId);
-    const container = $('#tab-graph');
-    
-    if (data.history.length === 0) {
-        container.html('<div class="graph-empty">ยังไม่มีประวัติการพูดคุย</div>');
-        return;
-    }
-
-    let html = '<div class="graph-container">';
-    data.history.forEach(item => {
-        // คำนวณความสูง (สเกล -100 ถึง 100 เป็น 0-100%)
-        const heightPct = Math.max(5, ((item.score + 100) / 200) * 100);
-        const color = item.score > 50 ? '#34c759' : item.score < 0 ? '#ff3b30' : '#007aff';
-        html += `
-            <div class="graph-bar-wrap" title="${item.date}: ${item.score} แต้ม">
-                <div class="graph-bar" style="height: ${heightPct}%; background: ${color};"></div>
-                <div class="graph-label">${item.date.split('/')[0]}</div>
-            </div>
-        `;
-    });
-    html += '</div><div style="text-align:center; font-size:11px; opacity:0.6;">ประวัติความสัมพันธ์ย้อนหลัง</div>';
-    container.html(html);
-}
-
-// Drag & Click Logic (แยกกันเด็ดขาด)
-function setupDraggable(elmnt) {
-    let isDragging = false;
-    let startX, startY, initialX, initialY, dragThreshold = false;
-
-    function applyPosition(x, y) {
-        const w = elmnt.offsetWidth || 75; const h = elmnt.offsetHeight || 75;
-        const maxX = window.innerWidth - w; const maxY = window.innerHeight - h;
-        let safeX = Math.max(0, Math.min(x, maxX)); let safeY = Math.max(0, Math.min(y, maxY));
-        elmnt.style.left = safeX + "px"; elmnt.style.top = safeY + "px";
-        return { x: safeX, y: safeY };
-    }
-
-    if (settings.position && settings.position.x !== null) applyPosition(settings.position.x, settings.position.y);
-    else applyPosition(window.innerWidth - 100, window.innerHeight - 150);
-
-    window.stRelResetPosition = function() {
-        settings.position = applyPosition(window.innerWidth - 100, window.innerHeight - 150);
-        saveSettings();
-    };
-
-    elmnt.addEventListener('mousedown', dragStart);
-    elmnt.addEventListener('touchstart', dragStart, { passive: false });
-
-    function dragStart(e) {
-        if (e.target.id === 'st-rel-bubble') return;
-        isDragging = true; dragThreshold = false;
-        startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-        startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-        initialX = elmnt.offsetLeft; initialY = elmnt.offsetTop;
-
-        document.addEventListener('mousemove', dragMove, { passive: false });
-        document.addEventListener('mouseup', dragEnd);
-        document.addEventListener('touchmove', dragMove, { passive: false });
-        document.addEventListener('touchend', dragEnd);
-    }
-
-    function dragMove(e) {
-        if (!isDragging) return;
-        const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-        const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-        
-        // ถ้าขยับเกิน 5px ถือว่าตั้งใจ Drag ไม่ใช่ Click
-        if (Math.abs(clientX - startX) > 5 || Math.abs(clientY - startY) > 5) {
-            dragThreshold = true;
-            if(e.cancelable) e.preventDefault();
-            applyPosition(initialX + (clientX - startX), initialY + (clientY - startY));
-        }
-    }
-
-    function dragEnd() {
-        isDragging = false;
-        document.removeEventListener('mousemove', dragMove);
-        document.removeEventListener('mouseup', dragEnd);
-        document.removeEventListener('touchmove', dragMove);
-        document.removeEventListener('touchend', dragEnd);
-
-        if (!dragThreshold) {
-            // ถือเป็นการ Click ธรรมดา -> เปิด Dashboard
-            renderDashboardData();
-            document.getElementById('st-rel-dashboard').classList.add('dash-open');
-        } else {
-            // บันทึกตำแหน่ง
-            settings.position = { x: elmnt.offsetLeft, y: elmnt.offsetTop };
-            saveSettings();
-        }
-    }
-}
-
-jQuery(async () => {
-    try {
-        const context = SillyTavern.getContext();
-        const eventSource = context.eventSource;
-        const event_types = context.event_types;
-
+    context.eventSource.on(context.event_types.APP_READY, () => {
         loadSettings();
-        injectCoreUI();
-        
-        console.log("[ST-REL V3] Grand Edition Initialized!");
+        setupUI();
+    });
 
-        eventSource.on(event_types.APP_READY, () => { 
-            updateWidgetUI(); 
-            resetIdleTimer(); 
-            if(context.characterId) processDecay(context.characterId);
-        });
-
-        eventSource.on(event_types.CHAT_CHANGED, () => { 
-            updateWidgetUI(); 
-            resetIdleTimer(); 
-            if(context.characterId) processDecay(context.characterId);
-            document.getElementById('st-rel-dashboard').classList.remove('dash-open');
-        });
-        
-        // ดักจับข้อความตอน AI พิมพ์เสร็จและ Render แล้ว
-        eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, (msgId) => {
-            if (!settings.enabled || !context.characterId) return;
-            resetIdleTimer();
-            
-            const chat = context.chat;
-            const message = chat.find(m => m._id === msgId || m.id === msgId) || chat[chat.length - 1];
-            if (!message || message.is_user) return;
-
-            const parsed = parseRelationshipData(message.mes, context.characterId);
-            if (parsed) {
-                const widget = document.getElementById('st-rel-widget');
-                widget.className = `st-rel-glass state-${parsed.status}`;
-                updateScreenTint(parsed.status);
-                
-                // เอฟเฟกต์ตามอารมณ์
-                if(parsed.status === 'love') spawnParticles('love');
-                if(parsed.status === 'angry') spawnParticles('angry');
-                if(parsed.status === 'cry' || parsed.status === 'sad') spawnParticles('sad');
-                
-                if (document.getElementById('st-rel-dashboard').classList.contains('dash-open')) {
-                    renderDashboardData(); // อัปเดตหน้าต่างถ้าเปิดอยู่
-                }
-            }
-        });
-
-        eventSource.on(event_types.MESSAGE_SENT, () => {
-            resetIdleTimer();
-            updateScreenTint('normal'); // รีเซ็ตสีจอกลับตอนเราพิมพ์ตอบ
-        });
-
-        window.addEventListener('resize', () => {
-            if (settings.enabled && window.stRelResetPosition) window.stRelResetPosition();
-        });
-
-    } catch (error) {
-        console.error("[ST-REL V3] Error:", error);
-    }
+    // ตรวจจับทุกครั้งที่รับข้อความ เพื่อแยกแยะ Tag, เปลี่ยนสถานะ, และลบ Tag ทิ้ง
+    context.eventSource.on(context.event_types.MESSAGE_RECEIVED, processIncomingMessage);
 });
