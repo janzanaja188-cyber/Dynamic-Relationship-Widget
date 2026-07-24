@@ -1,113 +1,161 @@
-/* path: public/scripts/extensions/third-party/st-relationship-widget/style.css */
+/* path: public/scripts/extensions/third-party/ios-status-lorebook/style.css */
 
-/* --- Core & Screen FX --- */
-#st-rel-screen-tint {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    pointer-events: none; z-index: 2147483600;
-    transition: background-color 2s ease-in-out; background-color: rgba(0,0,0,0);
-}
-#st-rel-particles-container {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    pointer-events: none; z-index: 2147483601; overflow: hidden;
-}
-
-/* --- The Widget (Minimal & Normal) --- */
-#st-rel-widget {
-    position: fixed; width: 75px; height: 75px; z-index: 2147483647;
-    pointer-events: auto; touch-action: none; user-select: none;
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-#st-rel-widget:active { transform: scale(0.9); }
-#st-rel-widget.minimal-mode { width: 40px; height: 40px; }
-#st-rel-widget.minimal-mode #st-rel-avatar { display: none; }
-
-.st-rel-glass {
-    position: relative; width: 100%; height: 100%; border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-    border: 2px solid rgba(255,255,255,0.3);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-    cursor: grab; display: flex; align-items: center; justify-content: center;
-}
-.st-rel-glass:active { cursor: grabbing; }
-#st-rel-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; pointer-events: none; }
-
-/* Status Colors & Unlockable Glows */
-.state-normal { border-color: rgba(255,255,255,0.4); }
-.state-love { border-color: #ff2d55; box-shadow: 0 0 20px rgba(255, 45, 85, 0.6); }
-.state-angry { border-color: #ff3b30; box-shadow: 0 0 20px rgba(255, 59, 48, 0.6); }
-.state-sad { border-color: #5ac8fa; box-shadow: 0 0 15px rgba(90, 200, 250, 0.6); }
-.state-cry { border-color: #007aff; box-shadow: 0 0 25px rgba(0, 122, 255, 0.8); }
-.state-obsessed { border-color: #af52de; box-shadow: 0 0 30px rgba(175, 82, 222, 0.9); animation: pulse-obsess 1s infinite; }
-
-/* Bubble (Thai Whispers) */
-#st-rel-bubble { 
-    position: absolute; bottom: calc(100% + 15px); right: -10px;
-    background: var(--SmartThemeWindowColor, rgba(30, 30, 30, 0.85));
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    color: var(--SmartThemeTextColor, #fff); 
-    padding: 10px 16px; border-radius: 18px 18px 4px 18px; 
-    font-size: 14px; white-space: nowrap; opacity: 0; transform: scale(0.5); 
-    pointer-events: none; border: 1px solid rgba(255,255,255,0.2); 
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
-    box-shadow: 0 10px 20px rgba(0,0,0,0.3); z-index: 10;
-}
-.bubble-show { opacity: 1 !important; transform: scale(1) !important; }
-
-/* --- Grand Dashboard (iOS Style) --- */
-#st-rel-dashboard {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -45%) scale(0.9);
-    width: 350px; max-width: 90vw; opacity: 0; pointer-events: none;
-    background: var(--SmartThemeWindowColor, rgba(20,20,20,0.75));
-    backdrop-filter: blur(25px) saturate(180%); -webkit-backdrop-filter: blur(25px) saturate(180%);
-    border: 1px solid rgba(255,255,255,0.15); border-radius: 24px;
-    box-shadow: 0 30px 60px rgba(0,0,0,0.5); z-index: 2147483648;
-    color: var(--SmartThemeTextColor, #fff); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); overflow: hidden;
-}
-#st-rel-dashboard.dash-open {
-    opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1);
+/* ปุ่มลอยด้านข้าง (Floating Button) */
+#ios-status-fab {
+    position: fixed;
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    padding: 12px 20px 12px 15px;
+    border-radius: 30px 0 0 30px;
+    cursor: pointer;
+    z-index: 8000;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-weight: bold;
+    color: #ff4d6d;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.dash-header { padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); position: relative; }
-.dash-header h3 { margin: 0; font-size: 18px; font-weight: 600; }
-.dash-close { position: absolute; right: 20px; top: 20px; cursor: pointer; opacity: 0.6; font-size: 20px; transition: opacity 0.2s; }
-.dash-close:hover { opacity: 1; }
+#ios-status-fab:hover {
+    right: 0px;
+    background: rgba(255, 255, 255, 1);
+    transform: translateY(-50%) scale(1.05);
+}
 
-.dash-tabs { display: flex; background: rgba(0,0,0,0.2); padding: 5px; margin: 15px; border-radius: 12px; }
-.dash-tab { flex: 1; text-align: center; padding: 8px; cursor: pointer; border-radius: 8px; font-size: 13px; font-weight: 500; transition: background 0.2s; opacity: 0.6; }
-.dash-tab.active { background: rgba(255,255,255,0.15); opacity: 1; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+/* แผง Bottom Sheet สไตล์ iOS */
+#ios-status-bottom-sheet {
+    position: fixed;
+    bottom: -100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 95%;
+    max-width: 500px;
+    max-height: 80vh;
+    background: rgba(250, 250, 250, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 30px 30px 0 0;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.15);
+    z-index: 9000;
+    padding: 20px 30px 40px 30px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    transition: bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+}
 
-.dash-content { padding: 0 20px 20px 20px; min-height: 200px; display: none; }
-.dash-content.active { display: block; animation: fade-in 0.3s; }
+#ios-status-bottom-sheet.open {
+    bottom: 0;
+}
 
-/* Status Tab */
-.status-card { background: rgba(255,255,255,0.05); border-radius: 16px; padding: 15px; margin-bottom: 10px; display: flex; align-items: center; gap: 15px; }
-.status-card img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
-.status-info { flex: 1; }
-.status-info h4 { margin: 0 0 5px 0; font-size: 16px; }
-.level-badge { display: inline-block; background: linear-gradient(135deg, #007aff, #5ac8fa); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-bottom: 8px; }
-.level-badge.max-level { background: linear-gradient(135deg, #ff2d55, #af52de); }
+/* เส้นลากด้านบน (Drag Handle) */
+.ios-drag-handle {
+    width: 40px;
+    height: 5px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    margin: 0 auto 20px auto;
+}
 
-.progress-bg { width: 100%; height: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; overflow: hidden; position: relative; }
-.progress-fill { height: 100%; background: #34c759; border-radius: 4px; transition: width 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-.progress-text { font-size: 11px; opacity: 0.7; margin-top: 5px; display: flex; justify-content: space-between; }
+/* เนื้อหาใน Sheet */
+.ios-status-content {
+    text-align: center;
+    color: #333;
+}
 
-/* Graph Tab */
-.graph-container { height: 150px; display: flex; align-items: flex-end; gap: 4px; padding-top: 20px; border-bottom: 1px solid rgba(255,255,255,0.2); margin-bottom: 10px; }
-.graph-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; group-hover: opacity 1; }
-.graph-bar { width: 100%; background: #007aff; border-radius: 4px 4px 0 0; min-height: 2px; transition: height 0.5s, background 0.3s; }
-.graph-bar:hover { filter: brightness(1.2); }
-.graph-label { font-size: 9px; opacity: 0.5; margin-top: 4px; }
-.graph-empty { text-align: center; opacity: 0.5; font-size: 13px; width: 100%; padding-top: 50px; }
+.ios-status-title {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+    margin-bottom: 5px;
+}
 
-/* Settings Tab */
-.ios-btn { width: 100%; background: rgba(255,255,255,0.1); border: none; color: inherit; padding: 12px; border-radius: 12px; font-size: 14px; cursor: pointer; margin-bottom: 10px; transition: background 0.2s; font-weight: 500; }
-.ios-btn:hover { background: rgba(255,255,255,0.2); }
-.ios-btn.danger { color: #ff3b30; }
+.ios-status-current {
+    font-size: 28px;
+    font-weight: 800;
+    color: #ff4d6d;
+    margin-bottom: 15px;
+    text-shadow: 0 2px 10px rgba(255, 77, 109, 0.2);
+    line-height: 1.2;
+}
 
-/* Animations */
-@keyframes pulse-obsess { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-@keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.particle { position: absolute; pointer-events: none; animation: particle-fall linear forwards; }
-@keyframes particle-fall { 0% { transform: translateY(-10px) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(360deg); opacity: 0; } }
+/* หลอด EXP */
+.ios-exp-container {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 20px;
+    height: 24px;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 10px;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.ios-exp-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);
+    width: 0%;
+    border-radius: 20px;
+    transition: width 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+}
+
+/* เอฟเฟกต์แสงวิ่งบนหลอด (Shimmer) */
+.ios-exp-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    100% { left: 200%; }
+}
+
+.ios-exp-text {
+    font-size: 13px;
+    color: #666;
+    font-weight: 600;
+}
+
+/* ปุ่มปิด */
+.ios-close-btn {
+    margin-top: 25px;
+    background: rgba(0, 0, 0, 0.05);
+    border: none;
+    padding: 12px 30px;
+    border-radius: 20px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.ios-close-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* อนิเมชันลอยของอารมณ์ตอนแต้มเด้ง */
+@keyframes floatUp {
+    0% { transform: translateY(0) scale(1); opacity: 1; }
+    100% { transform: translateY(-50px) scale(1.5); opacity: 0; }
+}
+.floating-emoji {
+    position: absolute;
+    pointer-events: none;
+    font-size: 24px;
+    animation: floatUp 1s ease-out forwards;
+    z-index: 9999;
+}
