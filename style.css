@@ -18,8 +18,10 @@
     width: 80px;
     height: 80px;
     z-index: 2147483647;
-    pointer-events: none;
-    touch-action: none;
+    pointer-events: auto; /* จำเป็นสำหรับการลาก */
+    touch-action: none; /* กันจอมือถือเลื่อนเวลาแตะลาก */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 @media screen and (max-width: 768px) {
@@ -31,17 +33,17 @@
 
 .st-rel-glass {
     position: relative; width: 100%; height: 100%; border-radius: 50%;
-    background: rgba(0, 0, 0, 0.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    pointer-events: auto; cursor: grab;
+    background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    cursor: grab;
     transition: transform 0.2s, border-color 0.5s, box-shadow 0.5s;
 }
-.st-rel-glass:active { cursor: grabbing; transform: scale(0.9); }
+.st-rel-glass:active { cursor: grabbing; transform: scale(0.95); }
 
 #st-rel-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; transition: filter 0.5s; pointer-events: none; }
 
-.state-normal { border-color: rgba(255,255,255,0.3); }
+.state-normal { border-color: rgba(255,255,255,0.4); }
 .state-love { border-color: #ff4d85; box-shadow: 0 0 20px rgba(255, 77, 133, 0.8); animation: heartbeat 1.5s infinite; }
 .state-love #st-rel-avatar { filter: contrast(1.1) saturate(1.2); }
 .state-angry { border-color: #ff3b30; box-shadow: 0 0 20px rgba(255, 59, 48, 0.8); animation: rageShake 0.4s infinite; }
@@ -49,12 +51,33 @@
 .state-sad, .state-cry { border-color: #32ade6; box-shadow: 0 0 15px rgba(50, 173, 230, 0.6); }
 .state-sad #st-rel-avatar, .state-cry #st-rel-avatar { filter: grayscale(0.5) sepia(0.2) hue-rotate(180deg); }
 
-#st-rel-score-popup { position: absolute; top: -15px; right: -5px; background: rgba(0,0,0,0.8); color: white; padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; opacity: 0; pointer-events: none; }
+#st-rel-score-popup { position: absolute; top: -15px; right: -5px; background: rgba(0,0,0,0.9); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 14px; font-weight: bold; opacity: 0; pointer-events: none; text-shadow: 0px 1px 2px rgba(0,0,0,0.5); z-index: 10; }
 .score-animate { animation: floatUpFade 2s forwards; }
 .score-positive { background: #34c759 !important; }
 .score-negative { background: #ff3b30 !important; }
 
-#st-rel-bubble { position: absolute; bottom: calc(100% + 5px); right: 0; background: var(--SmartThemeBodyColor); color: var(--SmartThemeTextColor); padding: 8px 12px; border-radius: 12px 12px 0 12px; font-size: 12px; white-space: nowrap; opacity: 0; transform: scale(0.8); pointer-events: none; border: 1px solid var(--SmartThemeBorderColor); transition: all 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+/* The Bubble Fix: พื้นหลังสีทึบ ตัวหนังสือสีขาว ปรับโครงสร้างเพื่อไม่ให้แบน */
+#st-rel-bubble { 
+    position: absolute; 
+    bottom: calc(100% + 10px); 
+    right: 0; 
+    background: rgba(20, 20, 20, 0.95);
+    color: #ffffff; 
+    padding: 8px 14px; 
+    border-radius: 12px 12px 0 12px; 
+    font-size: 13px; 
+    font-weight: 500;
+    white-space: nowrap; 
+    opacity: 0; 
+    transform: scale(0.8); 
+    pointer-events: none; 
+    border: 1px solid rgba(255,255,255,0.3); 
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5); 
+    z-index: 10;
+    min-width: 50px; 
+    text-align: center;
+}
 .bubble-show { opacity: 1 !important; transform: scale(1) !important; }
 
 @keyframes heartbeat { 0%, 30%, 60% { transform: scale(1); } 15%, 45% { transform: scale(1.1); } }
