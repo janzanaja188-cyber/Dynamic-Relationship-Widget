@@ -10,13 +10,12 @@ const defaultSettings = {
 
 let settings = {};
 let idleTimer = null;
-const IDLE_TIMEOUT_MS = 180000; // 3 นาที
+const IDLE_TIMEOUT_MS = 60000; // ปรับให้แสดงทุก 1 นาทีจะได้เห็นบ่อยขึ้น
 
 const idleWhispers = [
     "...", "Are you still there?", "Just looking at you...", "Thinking...", "*waits patiently*"
 ];
 
-// โหลดและเซฟตั้งค่า
 function loadSettings() {
     const context = SillyTavern.getContext();
     settings = Object.assign({}, defaultSettings, context.extensionSettings[MODULE_NAME]);
@@ -29,32 +28,21 @@ function saveSettings() {
     context.saveSettingsDebounced();
 }
 
-// Prompt Interceptor บังคับแทรกคำสั่งให้ AI ส่งสถานะ
+// 1. The Prompt Fix (บังคับเด็ดขาดด้วย System Message)
 window.relationshipWidgetInterceptor = function(chat, contextSize, abort, type) {
     if (!settings.enabled) return;
     if (type !== 'chat' && type !== 'swipe') return;
 
-    const instruction = `\n\n[SYSTEM INSTRUCTION: At the very end of your response, you MUST append a hidden HTML comment containing the relationship status and score change. Format EXACTLY like this: <!-- [STATUS: normal] [SCORE: +10] -->. Allowed states: normal, love, angry, sad, cry. Score: A number between -100 and +100.]`;
-
-    let userMsgFound = false;
-    for (let i = chat.length - 1; i >= 0; i--) {
-        if (chat[i].role === 'user') {
-            chat[i].content += instruction;
-            userMsgFound = true;
-            break;
-        }
-    }
-
-    if (!userMsgFound) {
-        chat.push({ role: 'system', content: instruction });
-    }
+    const prompt = `\n\n[CRITICAL SYSTEM INSTRUCTION: You MUST evaluate the current relationship and append a status block at the VERY END of your response. Format EXACTLY like this: <!-- [STATUS: state] [SCORE: number] -->\nValid states: normal, love, angry, sad, cry.\nNumber must be between -100 and +100.\nExample: <!-- [STATUS: love] [SCORE: +5] -->\nDO NOT ignore this instruction.]`;
+    
+    // ยัดเป็น System Message เดี่ยวๆ ก้อนสุดท้าย เพื่อให้น้ำหนักสูงสุด
+    chat.push({ role: 'system', content: prompt, name: 'system' });
 };
 
-// ฟังก์ชันแกะรอยหา Status และ Score (รองรับทุกรูปแบบ HTML Comment)
+// Robust Parser (อ่านได้แม้ AI พิมพ์มาชุ่ยๆ)
 function parseRelationshipData(text) {
     if (!text) return null;
-    // Regex แบบยืดหยุ่นสูง รองรับทุกการเว้นวรรคและเครื่องหมาย
-    const regex = /<!--[\s\S]*?\[?STATUS:\s*([a-zA-Z]+)\]?[\s\S]*?\[?SCORE:\s*([\+\-]?\d+)\]?[\s\S]*?-->/i;
+    const regex = /\[STATUS:\s*([a-zA-Z]+)\]\s*\[SCORE:\s*([\+\-]?\d+)\]/i;
     const match = text.match(regex);
 
     if (match) {
@@ -66,7 +54,6 @@ function parseRelationshipData(text) {
     return null;
 }
 
-// อัปเดตรูปอวาตาร์
 function updateAvatar() {
     const context = SillyTavern.getContext();
     const charId = context.characterId;
@@ -77,7 +64,6 @@ function updateAvatar() {
     }
 }
 
-// อัปเดตสถานะ Widget และ Score Popup
 function updateWidgetState(status, score) {
     if (!settings.enabled) return;
     const widget = document.getElementById('st-rel-widget');
@@ -98,7 +84,7 @@ function updateWidgetState(status, score) {
     }
 }
 
-// ระบบ Idle Whispers (กระซิบยามว่าง)
+// 3. The Bubble Fix (ยัดข้อความก่อนแสดงผล)
 function resetIdleTimer() {
     if (idleTimer) clearTimeout(idleTimer);
     hideBubble();
@@ -111,6 +97,7 @@ function showRandomWhisper() {
     const bubble = document.getElementById('st-rel-bubble');
     if (!bubble) return;
     bubble.textContent = idleWhispers[Math.floor(Math.random() * idleWhispers.length)];
+    void bubble.offsetWidth; // Force reflow บังคับให้เบราว์เซอร์คำนวณขนาดก่อนโชว์
     bubble.classList.add('bubble-show');
     setTimeout(hideBubble, 5000);
 }
@@ -120,7 +107,6 @@ function hideBubble() {
     if (bubble) bubble.classList.remove('bubble-show');
 }
 
-// สร้าง Widget ใส่ DOM พร้อมระบบลาก (Mouse + Touch) และป้องกันตกขอบ
 function injectWidgetToDOM() {
     if (document.getElementById('st-rel-widget-container')) return;
 
@@ -136,25 +122,22 @@ function injectWidgetToDOM() {
         </div>
     `;
     document.body.appendChild(container);
-    dragElement(document.getElementById("st-rel-widget"));
+    setupDraggable(document.getElementById("st-rel-widget"));
 }
 
-function dragElement(elmnt) {
-    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+// 2. The Drag Fix (สมูทขึ้น รองรับมือถือแบบ 100%)
+function setupDraggable(elmnt) {
+    let isDragging = false;
+    let startX, startY, initialX, initialY;
 
-    function applySafePosition(targetX, targetY) {
-        const rect = elmnt.getBoundingClientRect();
-        const w = rect.width || (window.innerWidth <= 768 ? 60 : 80);
-        const h = rect.height || (window.innerWidth <= 768 ? 60 : 80);
-
-        const maxX = Math.max(0, document.documentElement.clientWidth - w);
-        const maxY = Math.max(0, document.documentElement.clientHeight - h);
-
-        let safeX = targetX !== null ? targetX : maxX - 20;
-        let safeY = targetY !== null ? targetY : maxY - 100;
-
-        safeX = Math.max(0, Math.min(maxX, safeX));
-        safeY = Math.max(0, Math.min(maxY, safeY));
+    function applyPosition(x, y) {
+        const w = elmnt.offsetWidth || 80;
+        const h = elmnt.offsetHeight || 80;
+        const maxX = window.innerWidth - w;
+        const maxY = window.innerHeight - h;
+        
+        let safeX = Math.max(0, Math.min(x, maxX));
+        let safeY = Math.max(0, Math.min(y, maxY));
 
         elmnt.style.left = safeX + "px";
         elmnt.style.top = safeY + "px";
@@ -164,63 +147,73 @@ function dragElement(elmnt) {
         return { x: safeX, y: safeY };
     }
 
-    settings.position = applySafePosition(settings.position.x, settings.position.y);
+    if (settings.position && settings.position.x !== null) {
+        applyPosition(settings.position.x, settings.position.y);
+    } else {
+        applyPosition(window.innerWidth - 100, window.innerHeight - 150);
+    }
 
     window.stRelResetPosition = function() {
-        settings.position = applySafePosition(null, null);
+        settings.position = applyPosition(window.innerWidth - 100, window.innerHeight - 150);
         saveSettings();
     };
 
-    elmnt.onmousedown = dragStart;
-    elmnt.ontouchstart = dragStart;
+    elmnt.addEventListener('mousedown', dragStart);
+    elmnt.addEventListener('touchstart', dragStart, { passive: false });
 
     function dragStart(e) {
-        const isTouch = e.type.includes('touch');
-        const clientX = isTouch ? e.touches[0].clientX : e.clientX;
-        const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+        if (e.target.id === 'st-rel-bubble' || e.target.id === 'st-rel-score-popup') return;
+        
+        isDragging = true;
+        const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
 
-        pos3 = clientX;
-        pos4 = clientY;
+        startX = clientX;
+        startY = clientY;
+        initialX = elmnt.offsetLeft;
+        initialY = elmnt.offsetTop;
 
-        document.addEventListener('mouseup', dragEnd);
         document.addEventListener('mousemove', dragMove, { passive: false });
-        document.addEventListener('touchend', dragEnd);
+        document.addEventListener('mouseup', dragEnd);
         document.addEventListener('touchmove', dragMove, { passive: false });
+        document.addEventListener('touchend', dragEnd);
+        
+        elmnt.style.transition = 'none'; // ปิดอนิเมชั่นตอนกำลังลาก
     }
 
     function dragMove(e) {
-        if(e.cancelable) e.preventDefault();
-        const isTouch = e.type.includes('touch');
-        const clientX = isTouch ? e.touches[0].clientX : e.clientX;
-        const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+        if (!isDragging) return;
+        if(e.cancelable) e.preventDefault(); // กันจอมือถือเลื่อนตามตอนลาก
 
-        pos1 = pos3 - clientX;
-        pos2 = pos4 - clientY;
-        pos3 = clientX;
-        pos4 = clientY;
+        const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
 
-        applySafePosition(elmnt.offsetLeft - pos1, elmnt.offsetTop - pos2);
+        const dx = clientX - startX;
+        const dy = clientY - startY;
+
+        applyPosition(initialX + dx, initialY + dy);
     }
 
     function dragEnd() {
-        document.removeEventListener('mouseup', dragEnd);
+        isDragging = false;
         document.removeEventListener('mousemove', dragMove);
-        document.removeEventListener('touchend', dragEnd);
+        document.removeEventListener('mouseup', dragEnd);
         document.removeEventListener('touchmove', dragMove);
+        document.removeEventListener('touchend', dragEnd);
 
+        elmnt.style.transition = 'transform 0.2s, border-color 0.5s, box-shadow 0.5s'; // เปิดอนิเมชั่นกลับ
         settings.position = { x: elmnt.offsetLeft, y: elmnt.offsetTop };
         saveSettings();
     }
 }
 
-// สร้าง Settings UI และปุ่ม Reset ตำแหน่ง
 function injectSettingsUI() {
     if (document.getElementById('st-rel-settings-drawer')) return;
 
     const html = `
         <div class="inline-drawer" id="st-rel-settings-drawer">
             <div class="inline-drawer-toggle inline-drawer-header">
-                <b><i class="fa-solid fa-heart"></i> Relationship Widget</b>
+                <b><i class="fa-solid fa-heart"></i> Relationship Widget (Hardened)</b>
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
             </div>
             <div class="inline-drawer-content" style="display: none;">
@@ -262,7 +255,6 @@ function injectSettingsUI() {
     });
 }
 
-// Main Setup Lifecycle
 jQuery(async () => {
     try {
         const context = SillyTavern.getContext();
